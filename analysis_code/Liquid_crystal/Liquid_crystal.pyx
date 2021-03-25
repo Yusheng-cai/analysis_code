@@ -883,26 +883,26 @@ def fix_interface(vec,Broken_interface=None,verbose=False,bins=100):
     return new_vec,N_top
 
 def xvg_reader(file):
-        """
-        function that reads xvg files
+    """
+    function that reads xvg files
 
-        Args:
-        ----
-            file(str): input file path
+    Args:
+    ----
+        file(str): input file path
 
-        Return:
-        ------
-            data(numpy.ndarray) that is contained within the xvg file
-        """
-        f = open(file)
+    Return:
+    ------
+        data(numpy.ndarray) that is contained within the xvg file
+    """
+    f = open(file)
 
-        lines = f.readlines()
+    lines = f.readlines()
 
-        f.close()
-        # define the comment symbols which are ignored in .xvg files
-        comment_symbol = ['#','@']
+    f.close()
+    # define the comment symbols which are ignored in .xvg files
+    comment_symbol = ['#','@']
 
-        # ignore the lines which starts with comment symbols and take the second number (value of interest)
-        xvgdata = np.array([float(line.rstrip(" ").lstrip(" ").split()[1]) for line in lines if line[0] not in comment_symbol])
-    
-        return xvgdata
+    # ignore the lines which starts with comment symbols and take the second number (value of interest)
+    xvgdata = np.array([float(line.rstrip(" ").lstrip(" ").split()[1]) for line in lines if line[0] not in comment_symbol])
+
+    return xvgdata
