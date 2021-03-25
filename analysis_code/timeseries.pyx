@@ -15,6 +15,7 @@ class Timeseries:
         self.n = len(data)
         self.time = time
         self.data = data
+        assert self.n == len(time)
 
     def blockstats(self,size_block,num_draws):
         block = np.zeros((num_draws,))
