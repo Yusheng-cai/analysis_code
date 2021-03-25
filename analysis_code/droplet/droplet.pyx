@@ -50,6 +50,8 @@ class droplet:
             pos = pos - COM
             hist2d,_,_ = np.histogram2d(pos[:,0],pos[:,2],bins=[xx1,xx2])
             field += hist2d/len(tlist)
+            if verbose:
+                print("{} is done".format(t))
 
         return field
     
@@ -75,8 +77,8 @@ class droplet:
         Return: 
             (xc,yc,Ri): The center (xc,yc) and radius Ri of the fitted circle
         """
-        x = contour[0]
-        y = contour[1]
+        x = contour[:,0]
+        y = contour[:,1]
 
         xm = x.mean()
         ym = y.mean()
@@ -119,6 +121,4 @@ def func(c,x,y):
         dr(numpy.ndarray): A vector of values that represents the distance between the data points and the mean circle centered at c=(xc,yc) 
     """
     Ri = calc_R(x,y,*c)
-    return Ri - Ri.mean()
-
-    
+    return Ri - Ri.mean() 
