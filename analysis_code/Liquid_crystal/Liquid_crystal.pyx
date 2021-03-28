@@ -124,7 +124,6 @@ class Liquid_crystal:
 
         Return:
             vec(numpy.ndarray): The director matrix of all the residues in the system
-
         """
         u = self.u
         u.trajectory[ts]
