@@ -4,27 +4,192 @@ import MDAnalysis as mda
 from analysis_code.md import *
 from analysis_code.timeseries import *
 
+class Liquid_crystal:
+    """
+    Base class for all Liquid crystals
+
+    Args:
+    ----
+    itp(string): The path to the .itp file of the Liquid crystal molecule
+    top(string): The path to the .tpr file of the Liquid crystal molecule
+    xtc(string): The path to the .xtc file of the Liquid crystal molecule
+    u_vec(string): The atoms at which the direction of the LC molecule is defined (default C11-C14 for the mesogen in the literature 2 shown)
+    """
+    def __init__(self,itp,top,xtc,u_vec,bulk=True,sel=None):
+        self.itp = itp
+        self.top = top
+        self.xtc = xtc
+        self.bulk = bulk
+        self.sel = sel
+        self.u = mda.Universe(self.top,self.xtc)
+
+        if self.bulk == True:
+            self.N = len(self.u.residues)
+        else:
+            self.N = len(self.u.select_atoms(self.sel).residues)
+
+        self.atom1 = u_vec.split("-")[0]
+        self.atom2 = u_vec.split("-")[1]
+        self.initialize()
+       
+    def initialize(self):
+        u = self.u
+        if self.bulk == True:
+            res = u.select_atoms(self.sel).residues
+            r = res[0]
+        else:
+            r = u.residuesp[0]
+
+        for i in range(len(r.atoms)):
+            atom = r.atoms[i]
+            if atom.name == self.atom1:
+                self.aidx1 = i
+            elif atom.name == self.atom2:
+                self.aidx2 = i
+
+    def pos(self,ts):
+        """
+        Function that returns the position of each of the atoms in the system at time ts
+
+        Args:
+            ts(int): The time frame at which the calculation is performed upon
+
+        Return:
+            pos(numpy.ndarray): The position matrix at time ts of shape (N,3)
+        """
+        u = self.u
+        u.trajectory[ts]
+
+        if self.bulk == True:
+            return u.select_atoms(self.sel).atoms.positions
+        else:
+            return u.atoms.positions
+
+    def get_celldimension(self,ts):
+        """
+        Function that returns the cell dimension that each of the time frame 
+
+        Args:
+            ts(int): The time frame that the user want to obtain cell dimension at 
+
+        Return:
+            cell_dimension(numpy.ndarray): The cell dimension of the box as a (3,) numpy array
+        """
+        u = self.u
+        u.trajectory[ts]
+        cell_dimension = u.dimensions[:3]
+
+        return cell_dimension
+
+    def COM(self,ts,segment=None):
+        """
+        Function that calculates the center of mass of the Liquid crystal molecule at time ts
+
+        Args:
+            ts(int): The time frame at which the calculation is performed on 
+            segment(str): The segment that the user wants to calculate center of mass for (default None)
+
+        Return:
+            COM_mat(numpy.ndarray): The center of mass matrix of shape (N,3)
+        """
+        u = self.u
+        u.trajectory[ts]
+        N = self.N
+        COM_mat = np.zeros((N,3))
+        
+        if self.bulk == True:
+            residues = u.residues
+        else:
+            residues = u.select_atoms(self.sel).residues
+        
+        ix = 0
+        for res in residues:
+            if segment is None:
+                COM_mat[ix] = res.atoms.center_of_mass()
+            else:
+                num1,num2 = int(segment.split("-")[0]),int(segment.split("-")[1])
+                atom_grp = res.atoms[num1:num2]
+                COM_mat[ix] = atom_grp.center_of_mass()
+            ix += 1
+
+        return COM_mat
+ 
+    def director_mat(self,ts,MOI=False):
+        """
+        Function that finds the director vector of all the residues in the system and put it in a matrix of shape (N,3). This can also find the director matrix using Moment of inertia tensor (the eigenvector that corresponds to the lowest eigenvalue of MOI tensor)
+
+        Args:
+            ts(int): The time frame of the simulation that this operation is performed upon
+            MOI(bool): Whether or not to find director matrix using Moment of Inertia tensor
+
+        Return:
+            vec(numpy.ndarray): The director matrix of all the residues in the system
+
+        """
+        u = self.u
+        u.trajectory[ts]
+        N = self.N
+        director_mat = np.zeros((N,3))
+        aidx1 = self.aidx1
+        aidx2 = self.aidx2
+
+        if self.bulk == True:
+            residues = u.residues
+        else:
+            residues = u.select_atoms(self.sel).residues
+
+        ix = 0 
+        for res in residues:
+            if MOI:
+                director_mat[ix] = res.atoms.principal_axes()[-1]
+            else:
+                a1 = res.atoms[aidx1].position
+                a2 = res.atoms[aidx2].position
+
+                r = (a2-a1)/np.sqrt(((a2-a1)**2).sum())
+                director_mat[ix] = r
+            ix += 1
+
+        return director_mat
+
+    def Qmatrix(self,ts,MOI=False):
+        """
+        Function that calculates the Qmatrix of the system at time ts.
+
+        Args:
+            ts(int): The time frame of the simulation
+
+        Return:
+            1.Qmatrix(numpy.ndarray)= The Q matrix of the liquid crystalline system
+            2.eigvec(numpy.ndarray)=The director of the system at time ts
+            3.p2(numpy.ndarray)=The p2 value of the system at time ts
+        """
+        d_mat = self.director_mat(ts,MOI=MOI)
+        N = self.N
+        I = np.eye(3)
+
+        Q = 3/(2*N)*np.matmul(d_mat.T,d_mat) - 1/2*I
+        eigval,eigvec = np.linalg.eig(Q)
+        order = np.argsort(eigval)
+        eigval = eigval[order]
+        eigvec = eigvec[:,order]
+
+        return Q,eigvec[:,-1],-2*eigval[1]
+ 
 class nCB(simulation):
     """
     Args:
     ----
-        path(string): path to the MD_folder, in liquid crystals, it has to have the following files
+        path(str): path to the MD_folder, in liquid crystals, it has to have the following files
         1. {md_name}.tpr
         2. {md_name}_pbc.xtc
-        3. {md_name}_properties.xtc
         The folder that contains these files should be name {md_name}
 
         time(int): the total simulation time (ns)
-
         n(int): the n in nCB
-
         bulk(bool): a boolean that tells whether or not the simulation is bulk nCB or mixture
-
-        prop(list): a list that tells the LC object to load certain files, they need to have the name of 
-              {md_name}_property.xvg
-
+        prop(list): a list that tells the LC object to load certain files, they need to have the name of {md_name}_property.xvg
         p2(bool): a boolean that tells whether or not p2 vector needs to be computed and saved in the folder
-
         verbose(bool): whether or not the program shall print results
     """
     def __init__(self,path,time,n,bulk=True,prop=None,p2=False,verbose=False):
@@ -99,7 +264,6 @@ class nCB(simulation):
 
         return cell_dimension
 
-
     def director_mat(self,ts,MOI=False):
         """
         Function that calculates the director vector at time ts. It can either use the CN vector of nCB molecule or the moment of inertia tensor to figure out the director.
@@ -139,13 +303,11 @@ class nCB(simulation):
         calculates the Q matrix at a particular time step of the trajectory
 
         Args:
-        ----
-            ts: the time step at which the Qmatrix is calculated
+            ts(int): the time step at which the Qmatrix is calculated
+            MOI(bool): boolean that specifies whether or not to use moment of inertia tensor
 
         Return:
-            Q:
-            \sum_{l=1}^{N} (3*u_{l}u_{l}t - I)/2N
-            (3,3)
+            Q:\sum_{l=1}^{N} (3*u_{l}u_{l}t - I)/2N (3,3)
         """ 
         director_mat = self.director_mat(ts,MOI)
 
@@ -155,7 +317,7 @@ class nCB(simulation):
 
         Q = 3/(2*n)*np.dot(director_mat.T,director_mat) - 1/2*I
 
-        return Q,director_mat
+        return Q
     
     def director(self,Q):
         """
@@ -164,12 +326,11 @@ class nCB(simulation):
         eigenvalue of the Q matrix
 
         Args:
-        ----
-            Q: the Q matrix of LC system (3,3)
+            Q(numpy.ndarray): the Q matrix of LC system (3,3)
 
         Return:
-        ------
-            director in shape(3,1)
+            1. director in shape(3,1)
+            2. p2
         """
         eigv,eigvec = np.linalg.eig(Q)
             
@@ -183,12 +344,10 @@ class nCB(simulation):
     def COM(self,ts,segment='whole'):
         """
         Args:
-        ---
-            ts: the time step at which this center of mass measurement is at 
-            segment: the segment at which the center of mass is measured on
+            ts(int): the time step at which this center of mass measurement is at 
+            segment(str): the segment at which the center of mass is measured on
 
         Return:
-        ------
             center of mass matrix of shape (N_molecules,3)
         """
         self.properties["universe"].trajectory[ts]
@@ -215,23 +374,6 @@ class nCB(simulation):
 
         return COM 
 
-    def get_celldimension(self,ts):
-        """
-        Function that returns the cell dimension that each of the time frame 
-
-        Args:
-            ts(int): The time frame that the user want to obtain cell dimension at 
-
-        Return:
-            cell_dimension(numpy.ndarray): The cell dimension of the box as a (3,) numpy array
-        """
-        u = self.properties["universe"]
-        u.trajectory[ts]
-
-        cell_dimension = u.dimensions[:3]
-
-        return cell_dimension
- 
     def p2(self):
         """
         Function calculating p2 order parameter for nCB molecule
@@ -257,34 +399,22 @@ class nCB(simulation):
             ix += 1
 
         return p2_vec
-
-    
+ 
     def pcost_z(self,start_time,end_time,director,min_,max_,direction='z',segment='whole',skip=1,bins_z=100,bins_t=100,verbose=False):
         """
-        Function that calculates a heat map of p(cos(theta) as a function of z. 
+        Function that calculates a heat map of p(cos(theta)) as a function of z. 
 
         Args:
-        ----
             start_time(float): the starting time in ns
-
             end_time(float): the ending time in ns
-
-            director(numpy.ndarray): Array of the director of the system 
-            
+            director(numpy.ndarray): Array of the director of the system  
             min_(float): Minimum number of the z bin
-
             max_(float): Maximum number of the z bin 
-
             direction(str): at which direction is the calculation being performed along ('x','y','z')
-
             segment(str): which segment of the LC molecule to calculate COM for 
-
             skip(int): number of time frames to skip 
-
             bins_z(int): the bins along the direction where the calculation is being performed
-
             bins_t(int): the bins of theta for p(cos(theta))
-
             verbose(bool): whether to be verbose during execution
 
         Return:
@@ -300,7 +430,6 @@ class nCB(simulation):
         start_idx = np.searchsorted(t_idx,start_time,side='left')
         end_idx = np.searchsorted(t_idx,end_time,side='right')
         time_idx = np.arange(start_idx,end_idx,skip)
-
 
         pcost_theta_director = np.zeros((bins_z-1,bins_t-1)) # a 2-d array that holds p(cos(theta)) in shape (bins_z-1,bins_t-1)
 
@@ -321,7 +450,7 @@ class nCB(simulation):
             COM_mat = COM_mat[:,d] #(n_molecules,)
 
             # find the CN vectors of all the molecules 
-            CN_vec = self.CN_vec(ts)
+            CN_vec = self.director_mat(ts)
             cost = (CN_vec*director).sum(axis=1)
             
             prob,_,_ = np.histogram2d(COM_mat,cost,[z_binned,t_binned])
@@ -338,7 +467,6 @@ class nCB(simulation):
         and the director of the system which is passed in by the user.
 
         Args:
-        ----
             start(float): The time to start calculation (in ns)
             end(float): The time to end calculation (in ns)
             director(numpy.ndarray): The director of the system (default value [0,0,1])
@@ -346,7 +474,6 @@ class nCB(simulation):
             verbose(bool): whether or not to print messages
 
         Return:
-        ------
             cos(theta) in shape (n,n_molecules*n_atoms)
         """
         t = self.__len__()
@@ -358,11 +485,11 @@ class nCB(simulation):
         time_idx = np.arange(start_timeidx,end_timeidx,skip)
 
         n = len(time_idx)
-        costheta=np.zeros((n,self.n_molecules*self.n_atoms))
+        costheta = np.zeros((n,self.n_molecules*self.n_atoms))
         ix = 0
 
         for ts in time_idx:  
-            _,CN_direction = self.Qmatrix(ts) # CN_direction (N,3) 
+            CN_direction = self.director_mat(ts) # CN_direction (N,3) 
             b = np.dot(CN_direction,director) #of shpae (N,1)
             b = np.repeat(b,self.n_atoms,axis=1).flatten() # of shape (N*N_atoms)
             costheta[ix] = b
