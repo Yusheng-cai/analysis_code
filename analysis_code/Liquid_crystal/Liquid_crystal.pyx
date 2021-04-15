@@ -192,11 +192,11 @@ class nCB(simulation):
         verbose(bool): whether or not the program shall print results
     """
     def __init__(self,path,time,n,bulk=True,prop=None,p2=False,verbose=False):
+        super().__init__(path,time)
         self.n = n
         self.bulk = bulk
         self.prop = prop
 
-        super().__init__(path,time)
              
         if self.bulk == False:
             LC_atoms = self.properties["universe"].select_atoms("resname {}CB".format(n))
@@ -257,12 +257,12 @@ class nCB(simulation):
 
         Args:
         ----
-        ts(int): the time step of the trajectory
-        MOI(bool): whether or not the find director using moment of inertia tensor
+            ts(int): the time step of the trajectory
+            MOI(bool): whether or not the find director using moment of inertia tensor
 
         Return:
         ------
-        director_mat(numpy.ndarray):numpy array of CN vectors (N,3)
+            director_mat(numpy.ndarray):numpy array of CN vectors (N,3)
         """
         u = self.properties["universe"]
         u.trajectory[ts]
@@ -294,7 +294,7 @@ class nCB(simulation):
             MOI(bool): boolean that specifies whether or not to use moment of inertia tensor
 
         Return:
-            Q:\sum_{l=1}^{N} (3*u_{l}u_{l}t - I)/2N (3,3)
+            Q(numpy.ndarray):\sum_{l=1}^{N} (3*u_{l}u_{l}t - I)/2N (3,3)
         """ 
         director_mat = self.director_mat(ts,MOI)
 
@@ -316,8 +316,8 @@ class nCB(simulation):
             Q(numpy.ndarray): the Q matrix of LC system (3,3)
 
         Return:
-            1. director in shape(3,1)
-            2. p2
+            1. director(numpy.ndarray): director at one time step in shape(3,1)
+            2. p2(float): p2 OP at one time step
         """
         eigv,eigvec = np.linalg.eig(Q)
             
@@ -330,12 +330,14 @@ class nCB(simulation):
 
     def COM(self,ts,segment='whole'):
         """
+        Output the center of mass of each of the molecule in the system at a certain time step
+
         Args:
             ts(int): the time step at which this center of mass measurement is at 
             segment(str): the segment at which the center of mass is measured on
 
         Return:
-            center of mass matrix of shape (N_molecules,3)
+            COM(numpy.ndarray): center of mass matrix of shape (N_molecules,3)
         """
         self.properties["universe"].trajectory[ts]
 
