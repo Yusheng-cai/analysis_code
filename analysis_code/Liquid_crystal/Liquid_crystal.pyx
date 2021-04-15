@@ -197,19 +197,7 @@ class nCB(simulation):
         self.bulk = bulk
         self.prop = prop
 
-        if self.prop != None:
-            super().__init__(path,time,prop)
-            # Convert nm to A
-            if "volume" in prop:
-                self.properties["volume"].data = self.properties["volume"]*(10**3) #convert to A^3
-            if "Lx" in prop:
-                self.properties['Lx'].data = self.properties['Lx']*10 # convert to A
-            if "Ly" in prop:
-                self.properties['Ly'].data = self.properties['Ly']*10 
-            if "Lz" in prop:
-                self.properties['Lz'].data = self.properties['Lz']*10 
-        else:
-            super().__init__(path,time)
+        super().__init__(path,time)
              
         if self.bulk == False:
             LC_atoms = self.properties["universe"].select_atoms("resname {}CB".format(n))
@@ -275,7 +263,7 @@ class nCB(simulation):
 
         Return:
         ------
-        numpy array of CN vectors (N,3)
+        director_mat(numpy.ndarray):numpy array of CN vectors (N,3)
         """
         u = self.properties["universe"]
         u.trajectory[ts]
