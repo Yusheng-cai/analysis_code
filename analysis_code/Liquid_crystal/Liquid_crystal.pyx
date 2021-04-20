@@ -389,7 +389,7 @@ class nCB(simulation):
 
         return p2_vec
  
-    def pcost_z(self,start_time,end_time,director,min_,max_,direction='z',segment='whole',skip=1,bins_z=100,bins_t=100,verbose=False):
+    def pcost_z(self,start_time,end_time,director,min_,max_,direction='z',segment='whole',skip=1,bins_z=100,bins_t=100,verbose=False,Broken_interface=None):
         """
         Function that calculates a heat map of p(cos(theta)) as a function of z. 
 
@@ -405,13 +405,15 @@ class nCB(simulation):
             bins_z(int): the bins along the direction where the calculation is being performed
             bins_t(int): the bins of theta for p(cos(theta))
             verbose(bool): whether to be verbose during execution
+            Broken_interface(float): Where to draw the line for broken interface
 
         Return:
             2d array contains p(cos(theta)) as a function of z  (bins_z-1,bins_t-1)
         """
         u = self.properties['universe']
         t_binned = np.linspace(-1,1,bins_t)
-        z_binned = np.linspace(min_,max_,bins_z)
+        if Broken_interface == None:
+            z_binned = np.linspace(min_,max_,bins_z)
 
 
         # find the time frame indexes of the simulation
@@ -442,7 +444,14 @@ class nCB(simulation):
             CN_vec = self.director_mat(ts)
             cost = (CN_vec*director).sum(axis=1)
             
-            prob,_,_ = np.histogram2d(COM_mat,cost,[z_binned,t_binned])
+            if Broken_interface == None:
+                prob,_,_ = np.histogram2d(COM_mat,cost,[z_binned,t_binned])
+            else:
+                index = np.argwhere(COM_mat < Broken_interface) 
+                COM_mat[index] += (max_ - min_)
+                z_binned = np.linspace(COM_mat.min(),COM_mat.max(),bins_z)
+                prob,_,_ = np.histogram2d(COM_mat,cost,[z_binned,t_binned])
+
             pcost_theta_director += prob
              
             if verbose:
@@ -824,15 +833,20 @@ cpdef pcost_CN(LC,int ts,np.ndarray COM_dist_mat,str segment='benzene1',float di
 
     return (bin_vec[:-1],npbin_count) 
 
-def density_z_atoms(LC,start_time,end_time,direction='z',skip=1,bins_z=100,verbose=False,Broken_interface=None):
+def density_z_atoms(LC,start_time,end_time,vol,direction='z',skip=1,bins_z=100,verbose=False,Broken_interface=None):
     """
     calculates density of LC as a function of z
-
-    LC: Liquid crystal object 
-    start_time: the starting time of the calculation
-    end_time: the ending time of the calculation
-    direction: the direction where we can perform calculations along
-    skip: the number of time frames to skip 
+    
+    Args:
+        LC: Liquid crystal object 
+        start_time(float): the starting time of the calculation
+        end_time(float): the ending time of the calculation
+        vol(tuple): The volume passed in as (Lx,Ly,Lz)
+        direction(str): the direction where calculations is performed along(x,y,z)
+        skip(int): the number of time frames to skip (default 1)
+        bins_z(int): Number of bins in the direction (default 100)
+        verbose(bool): whether or not to be verbose (default False)
+        Broken_interface(float): Where to draw the line for broken interface (default None)
     
     returns: 
         density as a function of z (bins_z-1,)
@@ -853,8 +867,9 @@ def density_z_atoms(LC,start_time,end_time,direction='z',skip=1,bins_z=100,verbo
         d = 2
 
     u = LC["universe"]
+    Lx,Ly,Lz = vol
     if Broken_interface is not None:
-        Lx,Ly,Lz, draw_line = Broken_interface
+        draw_line = Broken_interface
 
 
     for ts in time_idx:
@@ -870,14 +885,11 @@ def density_z_atoms(LC,start_time,end_time,direction='z',skip=1,bins_z=100,verbo
             pos[bot_idx] += Lz
 
         pos_vec = np.linspace(pos.min(),pos.max(),bins_z)
- 
-        for j in range(bins_z-1):
-            less = pos_vec[j]
-            more = pos_vec[j+1]
 
-            index = np.argwhere(((pos >= less) & (pos < more)))
-            index = index.flatten()
-            density_z[j] += len(index)/(Lx*Ly*(more-less))
+        hist,_ = np.histogram(pos,pos_vec)
+        hist = hist/(Lx*Ly*(pos_vec[1]-pos_vec[0]))
+        density_z = density_z + hist
+ 
         if verbose:
             print("time step {} is done".format(ts))        
     return density_z/len(time_idx)
