@@ -17,11 +17,22 @@ class Timeseries:
         self.data = data
         assert self.n == len(time)
 
-    def blockstats(self,size_block,num_draws):
+    def blockbootstrap(self,size_block,num_draws):
+        """
+        Perform block bootstrapping
+
+        Args:
+            size_block(int): The size of the block in which to draw
+            num_draws(int): Number of times the draw is performed
+
+        Return:
+            mean(float): The mean of the averages of the blocks
+            std(float): The std of the averages of the blocks
+        """
         block = np.zeros((num_draws,))
         
         for i in range(num_draws):
-            b = np.random.choice(self.data,size_block)
+            b = np.random.choice(self.data,size_block,replace=False)
             block[i] = b.mean()
 
         return (block.mean(),block.std()) 
@@ -113,7 +124,7 @@ class Timeseries:
 
         return (lags,AC[:N])
 
-    def AC_tau(self,cutoff=False):
+    def AC_tau(self,AC,c=5):
         """
         Function that calculates autocorrelation time of a time series according to the definition provided by
 
@@ -126,7 +137,6 @@ class Timeseries:
         returns:
             autocorrelation time (float)
         """
-        _,ac = self.autocorrelation()
         coeff_ = 1-np.arange(1,self.n+1)/self.n
         
         if cutoff is False:
