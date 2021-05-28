@@ -124,7 +124,7 @@ class Timeseries:
 
         return (lags,AC[:N])
 
-    def AC_tau(self,AC,c=5):
+    def AC_tau(self,AC,cutoff=False):
         """
         Function that calculates autocorrelation time of a time series according to the definition provided by
 
@@ -137,6 +137,7 @@ class Timeseries:
         returns:
             autocorrelation time (float)
         """
+        ac = self.autocorrelation()
         coeff_ = 1-np.arange(1,self.n+1)/self.n
         
         if cutoff is False:
