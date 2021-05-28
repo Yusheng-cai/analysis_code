@@ -1,7 +1,6 @@
 import numpy as np
 cimport numpy as np
 import MDAnalysis as mda
-from analysis_code.md import *
 from analysis_code.timeseries import *
 
 class Liquid_crystal:
@@ -15,8 +14,7 @@ class Liquid_crystal:
     xtc(string): The path to the .xtc file of the Liquid crystal molecule
     u_vec(string): The atoms at which the direction of the LC molecule is defined (default C11-C14 for the mesogen in the literature 2 shown)
     """
-    def __init__(self,itp,top,xtc,u_vec,bulk=True,sel=None):
-        self.itp = itp
+    def __init__(self,top,xtc,u_vec,bulk=True,sel=None):
         self.top = top
         self.xtc = xtc
         self.bulk = bulk
@@ -28,7 +26,6 @@ class Liquid_crystal:
         else:
             self.N = len(self.u.select_atoms(self.sel).residues)
 
-        self.atom1 = u_vec.split("-")[0]
         self.atom2 = u_vec.split("-")[1]
         self.initialize()
        
@@ -175,64 +172,44 @@ class Liquid_crystal:
 
         return Q,eigvec[:,-1],-2*eigval[1]
  
-class nCB(simulation):
+class nCB:
     """
     Args:
     ----
-        path(str): path to the MD_folder, in liquid crystals, it has to have the following files
-        1. {md_name}.tpr
-        2. {md_name}_pbc.xtc
-        The folder that contains these files should be name {md_name}
-
+        tpr(string): Name of the tpr file
+        xtc(string): Name of the xtc file
         time(int): the total simulation time (ns)
         n(int): the n in nCB
-        bulk(bool): a boolean that tells whether or not the simulation is bulk nCB or mixture
-        prop(list): a list that tells the LC object to load certain files, they need to have the name of {md_name}_property.xvg
         p2(bool): a boolean that tells whether or not p2 vector needs to be computed and saved in the folder
-        verbose(bool): whether or not the program shall print results
     """
-    def __init__(self,path,time,n,bulk=True,prop=None,p2=False,verbose=False):
-        super().__init__(path,time)
+    def __init__(self,tpr,xtc,n,time,bulk=True,p2=False):
+        self.u = mda.Universe(tpr,xtc)
         self.n = n
         self.bulk = bulk
-        self.prop = prop
-
-             
-        if self.bulk == False:
-            LC_atoms = self.properties["universe"].select_atoms("resname {}CB".format(n))
-            self.n_atoms = len(LC_atoms.residues[0].atoms)
-            self.n_molecules = len(LC_atoms.residues)            
+        self.time = time
+    
+        if bulk:
+            self.n_molecules = len(self.u.residues)
         else:
-            self.n_atoms = len(self.properties["universe"].residues[0].atoms)
-            self.n_molecules = len(self.properties["universe"].residues)
-        
+            partial_u = self.u.select_atoms("resname {}CB".format(n))
+            self.n_molecules = len(partial_u.residues)
+
         if self.n == 5:
             self.segments = {"CN":np.arange(0,2),\
                     "benzene1":np.arange(2,8),\
                     "benzene2":np.arange(8,14),\
                     "HC_tail":np.arange(15,19)}
+            self.n_atoms = 19 
 
         if self.n == 8:
             self.segments = {"CN":np.arange(0,2),\
                     "benzene1":np.arange(2,8),\
                     "benzene2":np.arange(8,14),\
                     "HC_tail":np.arange(15,22)}
+            self.n_atoms = 22
 
-        # find p2 order parameter if specified by user
-        if p2 == True:
-            if "{}_{}.npy".format(self.mdname,"p2") not in self.files:
-                if verbose:
-                    print("{}_{}.npy not found, calculating p2 time series for the Liquid crystal simulation".format(self.mdname,"p2"))
-                data = self.p2()
-                np.save(path+"/{}_{}.npy".format(self.mdname,"p2"),data)
-                t = np.linspace(0,time,len(data))
-                self.properties["p2"] = Timeseries(data,t)
-            else:
-                if verbose:
-                    print("found {}_{}.npy in path, extracting data".format(self.mdname,"p2"))
-                data = np.load(path+"/{}_{}.npy".format(self.mdname,"p2"))
-                t = np.linspace(0,time,len(data))
-                self.properties["p2"] = Timeseries(data,t)
+    def __len__(self):
+        return len(self.u.trajectory)
 
     def get_celldimension(self,ts):
         """
@@ -264,7 +241,7 @@ class nCB(simulation):
         ------
             director_mat(numpy.ndarray):numpy array of CN vectors (N,3)
         """
-        u = self.properties["universe"]
+        u = self.u
         u.trajectory[ts]
 
         if self.bulk:
@@ -320,6 +297,7 @@ class nCB(simulation):
             2. p2(float): p2 OP at one time step
         """
         eigv,eigvec = np.linalg.eig(Q)
+        order = np.argsort(-abs(eigv))
             
         order = np.argsort(-abs(eigv))
         eigvec = eigvec[:,order]
@@ -339,12 +317,13 @@ class nCB(simulation):
         Return:
             COM(numpy.ndarray): center of mass matrix of shape (N_molecules,3)
         """
-        self.properties["universe"].trajectory[ts]
+        u = self.u
+        u.trajectory[ts]
 
         if self.bulk == True:
-            residues = self.properties['universe'].residues
+            residues = u.residues
         else:
-            residues = self.properties['universe'].select_atoms("resname {}CB".format(self.n)).residues
+            residues = u.select_atoms("resname {}CB".format(self.n)).residues
 
         if segment in self.segments.keys():
             idx = self.segments[segment]
@@ -376,7 +355,7 @@ class nCB(simulation):
             P2 vector as a function of time
         """
         ix = 0
-        t = len(self.properties["universe"].trajectory)
+        t = len(u.trajectory)
         p2_vec = np.zeros((t,))
         time = np.linspace(0,self.time,t)
 
@@ -410,8 +389,9 @@ class nCB(simulation):
         Return:
             2d array contains p(cos(theta)) as a function of z  (bins_z-1,bins_t-1)
         """
-        u = self.properties['universe']
+        u = self.u
         t_binned = np.linspace(-1,1,bins_t)
+
         if Broken_interface == None:
             z_binned = np.linspace(min_,max_,bins_z)
 
@@ -499,7 +479,7 @@ class nCB(simulation):
         return (costheta,time_idx)
 
 
-cpdef director_z(LC,ts,segment='whole',bins_z=100,direction='z',Broken_interface=None,verbose=False):
+def director_z(LC,ts,segment='whole',bins_z=100,direction='z'):
     """
     finds director as a function of z along the direction provided
    
@@ -511,17 +491,10 @@ cpdef director_z(LC,ts,segment='whole',bins_z=100,direction='z',Broken_interface
         bins_z: the number of bins that we want to break the analysis into
         direction:'x','y' or 'z'
         
-        Broken_interface: whether or not the interface is broken (if not 
-                          None, should have the following inputs
-                          Broken_interface = (Lz,draw_line)) where Lz
-                          and draw line are int. Lz is the entire height of the box
-                          and draw line is where the line would be drawn
-
     returns:
         p2z matrix in shape (T, n_molecules*n_atoms)
     """
-    cdef np.ndarray directorz = np.zeros((bins_z-1,3))
-    cdef np.ndarray COM_mat
+    directorz = np.zeros((bins_z,3))
    
     if direction == 'x':
         d = 0
@@ -538,27 +511,16 @@ cpdef director_z(LC,ts,segment='whole',bins_z=100,direction='z',Broken_interface
     # take only the dth dimension number of all COM 
     COM_mat = COM_mat[:,d] #(n_molecules,)
 
-    # set the universe trajectory to "ts" time step
-    LC['universe'].trajectory[ts]
-
     if LC.bulk == True:
-        residues = LC['universe'].residues
+        residues = LC.u.residues
     else:
-        residues = LC['universe'].select_atoms("resname {}CB".format(LC.n)).residues
+        residues = LC.u.select_atoms("resname {}CB".format(LC.n)).residues
 
-    COM_vec,Ntop = fix_interface(COM_mat,Broken_interface=Broken_interface,bins=bins_z,verbose=verbose)
+    COM_vec = np.linspace(COM_mat.min(),COM_mat.max(),bins_z)
 
     for i in range(bins_z-1):
-        if Ntop != 0:
-            if i >= Ntop:
-                j = i + 1
-            else:
-                j = i
-        else:
-            j = i
-
-        less = COM_vec[j]
-        more = COM_vec[j+1]
+        less = COM_vec[i]
+        more = COM_vec[i+1]
 
         index = np.argwhere(((COM_mat >= less) & (COM_mat < more)))
         index = index.flatten()
@@ -701,9 +663,9 @@ def pdb_bfactor(LC,pdb_name,data,verbose=False,sel_atoms=None,others=False):
     ix = 0
 
     data_array,time_idx = data 
-    LC.properties['universe'].add_TopologyAttr("tempfactors")
-    with mda.Writer(LC.path+'/'+pdb_name, multiframe=True,bonds=None,n_atoms=LC.n_atoms) as PDB:
-        u = LC.properties["universe"]
+    LC.u.add_TopologyAttr("tempfactors")
+    with mda.Writer(pdb_name, multiframe=True,bonds=None,n_atoms=LC.n_atoms) as PDB:
+        u = LC.u
         for ts in time_idx: 
             u.trajectory[ts]
             if sel_atoms != None:
