@@ -11,7 +11,7 @@ def run():
     max_ = 28
     nbins = 100
 
-    bins,gr = rdf(pos,pos,box,max_,nbins)
+    bins,gr = rdf3d(pos,pos,box,max_,nbins)
 
     return bins,gr
 
