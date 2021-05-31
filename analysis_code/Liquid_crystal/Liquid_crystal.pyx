@@ -297,10 +297,9 @@ class nCB:
             2. p2(float): p2 OP at one time step
         """
         eigv,eigvec = np.linalg.eig(Q)
-        order = np.argsort(-abs(eigv))
-            
-        order = np.argsort(-abs(eigv))
+        order = np.argsort(-eigv)    
         eigvec = eigvec[:,order]
+
         director = eigvec[:,0:1]
         order2 = np.argsort(eigv)
 
