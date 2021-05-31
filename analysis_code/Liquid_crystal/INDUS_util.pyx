@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.special import erf
+import autograd.numpy as nup
 
-def h(alpha_i,alpha_c,sigma,amin,amax):
+def h(pos,min_,max_,sigma=0.01,ac=0.02):
     """
     This is the function h(alpha) used in the paper by Amish on INDUS
     This function that the form 
@@ -12,34 +13,69 @@ def h(alpha_i,alpha_c,sigma,amin,amax):
     \phi(alpha_i) = k^-1*[e^{-alpha^{2}/(2sigma^{2})} - e^{-alphac^{2}/(2sigma^{2})}]
     where k is the normalizing constant
     
-    inputs:
-        alpha_i: the input alpha's, it can be within range range (can be a numpy array or float or int)
-        alpha_c: the alpha_c in the equation
-        sigma: the sigma in the equation
-        amin: the lower bound of integral
-        amax: the upper bound of integral
+    Args:
+        pos(numpy.ndarray)           : Input positions (N,dim) 
+        min_(numpy.ndarray or float) : The minimum of the probe volume (dim,)
+        max_(numpy.ndarray or float) : The maximum of the probe volume (dim,)
+        sigma(float)                 : sigma as defined in the paper by Amish
+        ac(float)                    : alpha c as defined in the paper by Amish
 
     output:
         a float/int or numpy array depending on the input alpha_i
         if alpha_i is float/int, then output will be int that corresponds to h(alpha_i)
         else if alpha_i is numpy array, then output will be numpy array that corresponds to h(alpha_i)
     """
-    # normalizing constant
-    k = -2*np.exp(-alpha_c**2/(2*sigma**2))*alpha_c+np.sqrt(2*np.pi*sigma**2)*erf(alpha_c/np.sqrt(2*sigma**2))
+    # normalizing constants
+    k = np.sqrt(2*np.pi*sigma**2) * erf(ac/np.sqrt(2*sigma**2)) - 2*ac*np.exp(-ac**2/(2*sigma**2))
+    k1 = 1/k*np.sqrt(np.pi*sigma**2/2)
+    k2 = 1/k*np.exp(-ac**2/(2*sigma**2))
 
-    # the low and high of the function, beyond these will be zero
-    low_ = amin - alpha_c
-    high = amax + alpha_c
-    h = np.heaviside(alpha_i - (amin - alpha_c),1) - np.heaviside(alpha_i - (amax + alpha_c),1)
+    p1 = (k1*erf((max_ - pos)/(np.sqrt(2)*sigma)) - k2*(max_ - pos) - 1/2)*\
+    np.heaviside(ac - np.abs(max_ - pos), 1.0)
+
+    p2 = (k1*erf((pos - min_)/(np.sqrt(2)*sigma)) - k2*(pos - min_) - 1/2)*\
+    np.heaviside(ac - np.abs(pos - min_),1.0)
+
+    p3 = np.heaviside(ac + 1/2*(max_ - min_) - np.abs(pos - 1/2*(max_ + min_)),1.0)
+    h = p1 + p2 + p3
+
+    return h
+
+def phi(alpha,sigma=0.01,ac=0.02):
+    """
+    Calculate phi function in INDUS where h = \int phi
+
+    Args:
+        alpha(numpy.ndarray)    : The alpha variable in the phi function for INDUS
+        sigma(float)            : The sigma as defined in INDUS
+        ac(float)               : The alphac as defined in INDUS
+    """
+    k = np.sqrt(2*np.pi*sigma**2) * erf(ac/np.sqrt(2*sigma**2)) - 2*ac*np.exp(-ac**2/(2*sigma**2))
+    p = 1/k*(np.exp(-alpha**2/(2*sigma**2)) - np.exp(-ac**2/(2*sigma**2)))*np.heaviside(ac - np.abs(alpha),1)
+    return p
+
+def hprime(pos,max_,min_,indicator,sigma=0.01,alphac=0.02):
+    """
+    Function that calculates derivatve of h -> which we call h prime
+
+    Args:
+        pos(numpy.ndarray)  : The positions of the atoms ((N,3))
+        max_(numpy.ndarray) : The maximum of the probe volume ((3,))
+        min_(numpy.ndarray) : The minimum of the probe volume ((3,))
+        indicator(numpy.ndarray)    : The indicator function for each of the atom ((N,3))
+        sigma(float)        : sigma as defined in INDUS 
+        alphac(float)       : alphac as defined in INDUS 
     
-    # set appropriate boundary depending on the alpha_i
-    a = np.where(np.abs(alpha_i - amin) < alpha_c,amin,alpha_i-alpha_c)
-    b = np.where(np.abs(alpha_i - amax) < alpha_c,amax,alpha_i+alpha_c)
+    Returns:
+        derivative of hprime(numpy.ndarray) : ((N,3))
+    """
+    deriv_x = -(phi(max_[0]-pos[:,0],sigma,alphac) - phi(min_[0]-pos[:,0],sigma,alphac))*indicator[:,1]*indicator[:,2]
+    deriv_y = -(phi(max_[1]-pos[:,1],sigma,alphac) - phi(min_[1]-pos[:,1],sigma,alphac))*indicator[:,2]*indicator[:,0]
+    deriv_z = -(phi(max_[2]-pos[:,2],sigma,alphac) - phi(min_[2]-pos[:,2],sigma,alphac))*indicator[:,1]*indicator[:,0]
 
-    # return the integrated value/values
-    return h/k*((a-b)*np.exp(-alpha_c**2/(2*sigma**2))+\
-            np.sqrt(np.pi/2)*sigma*(erf((alpha_i-a)/np.sqrt(2*sigma**2))\
-                                    -erf((alpha_i-b)/np.sqrt(2*sigma**2)))) 
+    deriv = np.hstack((deriv_x[:,np.newaxis],deriv_y[:,np.newaxis],deriv_z[:,np.newaxis]))
+
+    return deriv
 
 def equilibrium_k0(LC,xmin,xmax,ymin,ymax,zmin,zmax,start_t,end_t,alpha_c=0.02,sigma=0.01,skip=1,verbose=False):
     """
@@ -68,10 +104,10 @@ def equilibrium_k0(LC,xmin,xmax,ymin,ymax,zmin,zmax,start_t,end_t,alpha_c=0.02,s
     N_tot = np.zeros((len(calc_time),))
     ix = 0
     if LC.bulk == True:
-        u = LC['universe']
+        u = LC.universe
         atoms = u.select_atoms("resname {}CB".format(LC.n))
     else:
-        u = LC['universe']
+        u = LC.universe
         atoms = u.select_atoms("all")
     
 
@@ -89,9 +125,9 @@ def equilibrium_k0(LC,xmin,xmax,ymin,ymax,zmin,zmax,start_t,end_t,alpha_c=0.02,s
         pos = pos[pos[:,2]>=zmin]
         pos = pos[pos[:,2]<=zmax]
 
-        h_x = h(pos[:,0],alpha_c,sigma,xmin,xmax)
-        h_y = h(pos[:,1],alpha_c,sigma,ymin,ymax)
-        h_z = h(pos[:,2],alpha_c,sigma,zmin,zmax)
+        h_x = h(pos[:,0],xmin,xmax,sigma,alpha_c)
+        h_y = h(pos[:,1],ymin,ymax,sigma,alpha_c)
+        h_z = h(pos[:,2],zmin,zmax,sigma,alpha_c)
 
         h_ = h_x*h_y*h_z
         N_tilde = h_.sum()
