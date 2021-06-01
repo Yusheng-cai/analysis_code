@@ -366,7 +366,38 @@ class nCB:
             ix += 1
 
         return p2_vec
- 
+
+    def p2globaldata_pdb(self,start_time,end_time,skip=0):
+        """
+        Function that writes out p2 data for global P2 for all atoms 
+
+        Args:
+            start_time(float): The starting time in real time (ns)
+            end_time(float)  : The ending time in real time (ns)
+            skip(int)        : The skipping time step in steps units
+        """
+        u = self.u
+        # find the time frame indexes of the simulation
+        t_idx = np.linspace(0,self.time,len(u.trajectory))
+        start_idx = np.searchsorted(t_idx,start_time,side='left')
+        end_idx = np.searchsorted(t_idx,end_time,side='right')
+        time_idx = np.arange(start_idx,end_idx,skip)
+    
+        p2_data = np.zeros((len(time_idx), self.n_molecules*self.n_atoms)) 
+        idx = 0
+        for t in time_idx:
+            Q = self.Qmatrix(t)
+            _,eigv = self.director(Q)
+
+            p2 = eigv[1]*(-2.0)
+            p2ts = np.ones((self.n_molecules*self.n_atoms,))*p2
+            p2_data[idx] = p2ts
+
+            idx+=1
+        
+        return (p2_data,time_idx)
+
+         
     def pcost_z(self,start_time,end_time,director,min_,max_,direction='z',segment='whole',skip=1,bins_z=100,bins_t=100,verbose=False,Broken_interface=None):
         """
         Function that calculates a heat map of p(cos(theta)) as a function of z. 
