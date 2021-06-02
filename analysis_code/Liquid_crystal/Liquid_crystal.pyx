@@ -2,6 +2,7 @@ import numpy as np
 cimport numpy as np
 import MDAnalysis as mda
 from analysis_code.timeseries import *
+import analysis_code.Liquid_crystal.INDUS_util as indus
 
 class Liquid_crystal:
     """
@@ -182,11 +183,12 @@ class nCB:
         n(int): the n in nCB
         p2(bool): a boolean that tells whether or not p2 vector needs to be computed and saved in the folder
     """
-    def __init__(self,tpr,xtc,n,time,bulk=True,p2=False):
+    def __init__(self,tpr,xtc,n,time,bulk=True,p2=False,trjconv=True):
         self.u = mda.Universe(tpr,xtc)
         self.n = n
         self.bulk = bulk
         self.time = time
+        self.trjconv = trjconv
     
         if bulk:
             self.n_molecules = len(self.u.residues)
@@ -228,6 +230,21 @@ class nCB:
 
         return cell_dimension
 
+    def fix_pbc(self,pos,box_dimensions):
+        """
+        Function that fixes periodic boundary condition of a particle's position
+
+        Args:
+            pos(numpy.ndarray)           : The position of the particle, could be passed in shape (N,3)
+            box_dimensions(numpy.ndarray): Assume a orthorhombic box, this is passed in with shape (3,) with [lx,ly,lz]
+        """
+        lt = pos < -box_dimensions/2
+        gt = pos > box_dimensions/2
+
+        pos = pos + lt*box_dimensions - gt*box_dimensions
+
+        return pos
+
     def director_mat(self,ts,MOI=False):
         """
         Function that calculates the director vector at time ts. It can either use the CN vector of nCB molecule or the moment of inertia tensor to figure out the director.
@@ -243,6 +260,8 @@ class nCB:
         """
         u = self.u
         u.trajectory[ts]
+        # Either trjconv is true or MOI is true
+        assert(self.trjconv + MOI <= 1)
 
         if self.bulk:
             residues = u.residues
@@ -250,6 +269,8 @@ class nCB:
             residues = u.select_atoms("resname {}CB".format(self.n)).residues
         
         director_mat = np.zeros((len(residues),3))
+        norm_mat     = np.zeros((len(residues),1))
+        box_dimensions = self.get_celldimension(ts)
         for i in range(len(residues)): 
             res = residues[i]
             if MOI:
@@ -257,10 +278,19 @@ class nCB:
             else:
                 N = res.atoms[0].position
                 C = res.atoms[1].position
-                CN_vec = (N - C)/np.sqrt(((N-C)**2).sum())
+                if not self.trjconv:
+                    CN_vec = self.fix_pbc(N - C, box_dimensions)
+                    norm   = np.sqrt((CN_vec**2).sum())
+                    norm_mat[i] = norm
+                    CN_vec = CN_vec/norm
+                else:
+                    CN_vec      = N - C
+                    norm        = np.sqrt((CN_vec**2).sum())
+                    norm_mat[i] = norm
+                    CN_vec      = CN_vec/norm
                 director_mat[i] = CN_vec
 
-        return director_mat
+        return director_mat, norm_mat
 
     def Qmatrix(self,ts,MOI=False):
         """
@@ -273,7 +303,7 @@ class nCB:
         Return:
             Q(numpy.ndarray):\sum_{l=1}^{N} (3*u_{l}u_{l}t - I)/2N (3,3)
         """ 
-        director_mat = self.director_mat(ts,MOI)
+        director_mat,_ = self.director_mat(ts,MOI)
 
         ix = 0
         n = self.n_molecules
@@ -297,13 +327,11 @@ class nCB:
             2. p2(float): p2 OP at one time step
         """
         eigv,eigvec = np.linalg.eig(Q)
-        order = np.argsort(-eigv)    
+        order = np.argsort(eigv)    
         eigvec = eigvec[:,order]
+        eigv  = eigv[order]
 
-        director = eigvec[:,0:1]
-        order2 = np.argsort(eigv)
-
-        return director,eigv[order2]
+        return eigvec,eigv
 
     def COM(self,ts,segment='whole'):
         """
@@ -341,9 +369,9 @@ class nCB:
 
         return COM 
 
-    def p2(self):
+    def p2(self,ts):
         """
-        Function calculating p2 order parameter for nCB molecule
+        Function calculating p2 order parameter for nCB molecule using Q tensor formulation
         Q matrix is calculated as following:
         Q = \sum_{l}^{N}(3u_{l}u_{l}^{T} - I)/2N
         we choose p2 to be -2*lambda_{0} where lambda_{0} is the second largest eigenvalue of Q
@@ -353,19 +381,107 @@ class nCB:
         ------
             P2 vector as a function of time
         """
-        ix = 0
-        t = len(u.trajectory)
-        p2_vec = np.zeros((t,))
-        time = np.linspace(0,self.time,t)
+        Q = self.Qmatrix(ts)
 
-        for ts in range(t):
-            Q = self.Qmatrix(ts)
-            _,eigv = self.director(Q)
+        # Ordered eigen pair
+        _,eigv = self.director(Q)
 
-            p2_vec[ix] = eigv[1]*(-2)
-            ix += 1
+        return eigv[1]*(-2.0)
+    
+    def p2tilde(self, ts, min_, max_):
+        """
+        Function that calculates p2tilde which is p2 in a probe volume 
 
-        return p2_vec
+        Args:   
+            ts(int)             : The time step at which is calculation is performed upon
+            min_(numpy.ndarray) : The minimum of the bounding box (assumed orthorhombic) [xmin, ymin, zmin] (3,)
+            max_(numpy.ndarray) : The maximum of the bounding box (assumed orthorhombic) [xmax, ymax, zmax] (3,)
+
+        Returns: 
+            p2tilde(float)      : P2tilde of the specified region
+        """
+        # Shift the box center
+        center_     = (min_ + max_)/2
+        min_        = min_ - center_ 
+        max_        = max_ - center_
+        N           = self.n_molecules
+        box_dim     = self.get_celldimension(ts)
+        Ncenter_mat = np.zeros((N,3))
+        Q           = np.zeros((3,3))
+        u           = self.u
+        u.trajectory[ts]
+        if self.bulk:
+            residues    = u.residues
+        else:
+            residues    = u.select_atoms("resname {}CB".format(self.n)).residues
+
+        for i in range(N):
+            pos = residues[i].atoms.positions 
+            N_pos          = pos[0]
+            Ncenter_       = N_pos - center_
+            if not self.trjconv:
+                Ncenter_       = self.fix_pbc(Ncenter_,box_dim) 
+            Ncenter_mat[i] = Ncenter_
+
+        hr      = indus.h(Ncenter_mat, min_, max_,sigma=0.1,ac=0.2) 
+        hr      = np.prod(hr,axis=1)
+        Ntilde  = hr.sum()
+
+        u, _    = self.director_mat(ts)
+
+        for i in range(N): 
+            ui   = u[i]
+            Q   += (1.5*np.outer(ui, ui) -0.5*np.eye(3))*hr[i]
+        Q = Q/Ntilde 
+
+        _, eigv = self.director(Q)
+        
+        return eigv[1]*(-2.0)
+
+    def p2_cos(self,ts,n):
+        """
+        Function that calculates p2 using the second legendre polynomial 
+
+        Args:
+            ts(int)         : The time step at which the calculation is performed on
+            n(numpy.ndarray): The director at which the calculation is performed with
+
+        Returns:
+            p2(float)       : The p2 value
+        """
+        n   = n/np.sqrt((n**2).sum())
+        u,_ = self.director_mat(ts)
+        n_molecules = self.n_molecules
+        dot_product = (u*n).sum(axis=1)
+
+        p2 = 1/n_molecules*(1.5*(dot_product)**2 - 0.5).sum()
+
+        return p2
+    
+    def p2_prime(self,ts):
+        """
+        Derivative of p2 with respect to the head & tail atoms (N & C)
+
+        Args:
+            ts(int)        : The time step the calculation is performed on
+
+        Return:
+            head_derivative(numpy.ndarray)
+            tail_derivative(numpy.ndarray)
+        """
+        # norm  = (N,1)
+        u, norm     = self.director_mat(ts)
+        Q           = self.Qmatrix(ts)
+        eigvec,eigv = self.director(Q)
+        N           = self.n_molecules
+
+        v1 = eigvec[:,1]
+        
+        dot_product     = (u*v1).sum(axis=1,keepdims=True)
+        head_derivative = -6/(N*norm)*dot_product*(v1 - u*dot_product)
+        tail_derivative = -1.0*head_derivative
+
+        return (head_derivative, tail_derivative)
 
     def p2globaldata_pdb(self,start_time,end_time,skip=0):
         """
@@ -451,7 +567,7 @@ class nCB:
             COM_mat = COM_mat[:,d] #(n_molecules,)
 
             # find the CN vectors of all the molecules 
-            CN_vec = self.director_mat(ts)
+            CN_vec, _ = self.director_mat(ts)
             cost = (CN_vec*director).sum(axis=1)
             
             if Broken_interface == None:
@@ -497,7 +613,7 @@ class nCB:
         ix = 0
 
         for ts in time_idx:  
-            CN_direction = self.director_mat(ts) # CN_direction (N,3) 
+            CN_direction,_ = self.director_mat(ts) # CN_direction (N,3) 
             b = np.dot(CN_direction,director) #of shpae (N,1)
             b = np.repeat(b,self.n_atoms,axis=1).flatten() # of shape (N*N_atoms)
             costheta[ix] = b
@@ -574,27 +690,30 @@ def director_z(LC,ts,segment='whole',bins_z=100,direction='z'):
 
 
 # find p2 as a function of z where z represents one direction in the Cartesian coordinates
-cpdef p2_z(LC,start_t,end_t,director=None,segment='whole',skip=None,bins_z=100,direction='z',Qmatrix=True,Broken_interface=None,verbose=False):
+def p2_z(LC,start_t,end_t,bins_z = 100, segment='whole',skip=None,direction='z',verbose=False):
     """
     finds p2 as a function of z along the direction provided
+    Always uses the Qtensor formulation
     
-    start_t: the time at which the evaluation starts (in ns)
-    end_t: the time at which the evaluation ends (in ns)
-    direction:'x','y' or 'z'
-    segment: The segment at where we want to take COM at 
+    Args:
+        LC(Liquid_crystal): The Liquid crystal object
+        start_t(float)    : The time at which the evaluation starts (in ns)
+        end_t(float)      : The time at which the evaluation ends (in ns)
+        bins_z(int)       : The number of bins
+        segment(string)   : String that represents the segment of nCB molecule
+        skip(int)         : Number of time steps to skip 
+        direction(string) : The direction in which the calculation is performed over
+        verbose(bool)     : Whether or not to be verbose
 
     returns:
-        p2z matrix in shape (T, n_molecules*n_atoms)
+        p2z matrix in shape (bins_z,)
     """
-    cdef int t = len(LC) # total amount of time frames in LC simulation 
-    cdef np.ndarray time = np.linspace(0,LC.time,t) # find the list of simulation times in ns 
-    cdef int start_timeidx = np.searchsorted(time,start_t,side='left') # find the index of the starting time in list of simulation times (in frame)
-    cdef int end_timeidx = np.searchsorted(time,end_t,side='right') # find the index of the ending time in list of simulation times (in frame)
-    cdef np.ndarray time_idx = np.arange(start_timeidx,end_timeidx,skip) 
-    cdef int n = len(time_idx)
-    cdef np.ndarray p2z = np.zeros((bins_z-1,))
-    cdef np.ndarray COM_mat
-    cdef int ix = 0
+    time = np.linspace(0,LC.time,len(LC)) # find the list of simulation times in ns 
+    start_timeidx = np.searchsorted(time,start_t,side='left') # find the index of the starting time in list of simulation times (in frame)
+    end_timeidx = np.searchsorted(time,end_t,side='right') # find the index of the ending time in list of simulation times (in frame)
+    time_idx = np.arange(start_timeidx,end_timeidx,skip) 
+    p2z = np.zeros((bins_z,))
+    u = LC.u
    
     if direction == 'x':
         d = 0
@@ -605,7 +724,6 @@ cpdef p2_z(LC,start_t,end_t,director=None,segment='whole',skip=None,bins_z=100,d
     if direction == 'z':
         d = 2
     
-
     for ts in time_idx:
         if verbose:
             print("performing calculations for t={}".format(ts))
@@ -616,58 +734,36 @@ cpdef p2_z(LC,start_t,end_t,director=None,segment='whole',skip=None,bins_z=100,d
         COM_mat = COM_mat[:,d] #(n_molecules,)
 
         # set the universe trajectory to "ts" time step
-        LC['universe'].trajectory[ts]
+        u.trajectory[ts]
         if LC.bulk == True:
-            residues = LC['universe'].residues
+            residues = u.residues
         else:
-            residues = LC['universe'].select_atoms("resname {}CB".format(LC.n)).residues
+            residues = u.select_atoms("resname {}CB".format(LC.n)).residues
 
-        COM_vec,Ntop = fix_interface(COM_mat,Broken_interface=Broken_interface,bins=bins_z,verbose=verbose) 
+        COM_vec   = np.linspace(COM_mat.min()-0.1,COM_mat.max()+0.1,bins_z)
+        digitized = np.digitize(COM_mat,COM_vec,right=False)
 
-        for i in range(bins_z-1):
-            if Ntop != 0:
-                if i >= Ntop:
-                    j = i + 1
-                else:
-                    j = i
-            else:
-                j=i
-
-            less = COM_vec[j]
-            more = COM_vec[j+1]
-
-            index = np.argwhere(((COM_mat >= less) & (COM_mat < more)))
+        for i in range(1,bins_z):
+            index = np.argwhere(digitized == i)
             index = index.flatten()
             if index.size != 0:
-                if Qmatrix:
-                    Q = np.zeros((3,3))
-                    I = np.eye(3)
-                else:
-                    p2 = 0
                 number = len(index) # number of molecules with COM in range (less, more)
-                for idx in index:
-                    res = residues[idx]
-                    N = res.atoms[0].position
-                    C = res.atoms[1].position
-                    CN_vec = (N - C)/np.sqrt(((N-C)**2).sum())
-
-                    if Qmatrix:
-                        Q += (3*np.outer(CN_vec,CN_vec)-I)/(2*number)
-                    else:
-                        cos_t = np.dot(CN_vec,director)
-                        p2 += ((cos_t**2)*3-1)/(2*number)
-                if Qmatrix:
-                    eigval,eigvec = np.linalg.eig(Q)
-                    order = np.argsort(eigval)
-                    eigval = eigval[order]
-                    p2 = -2*eigval[1]
-
-                    diff_order = np.argsort(np.abs(eigval))
-                    eigvec = eigvec[:,diff_order]
-                    p2z[i] += p2
-                else:
-                    p2z[i] += p2
-    p2z /= n
+                d_mat  = np.zeros((number,3))
+                for j in range(len(index)):
+                    idx       = index[j]
+                    res       = residues[idx]
+                    N         = res.atoms[0].position
+                    C         = res.atoms[1].position
+                    CN_vec    = (N - C)/np.sqrt(((N-C)**2).sum())
+                    
+                    d_mat[j] = CN_vec
+                Q = 3/(2*number)*np.matmul(d_mat.T,d_mat) - 1/2*np.eye(3)
+                eigval,eigvec = np.linalg.eig(Q)
+                order = np.argsort(eigval)
+                eigval = eigval[order]
+                p2 = -2*eigval[1]
+                p2z[i] += p2
+    p2z /= len(time_idx)
     return (p2z,time_idx)
 
 
