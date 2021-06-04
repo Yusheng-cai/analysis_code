@@ -57,11 +57,12 @@ class Liquid_crystal:
     def __len__(self):
         return len(self.u_.trajectory)
     
-    def get_residues(self,ts):
+    def get_residues(self,ts:int):
         """
         Obtain the residue groups at time steps ts
 
-        Returns:
+        Return:
+        -------
             residue(mda.ResidueGroup)   : The correct residue that corresponds to whether or not the simulation is bulk
         """ 
         u   = self.u_
@@ -72,14 +73,16 @@ class Liquid_crystal:
         else:
             return u.select_atoms("resname {}".format(self.name_)).residues
 
-    def pos(self,ts):
+    def pos(self,ts:int):
         """
         Function that returns the position of each of the mesogen atoms in the system at time ts
 
         Args:
+        -----
             ts(int): The time frame at which the calculation is performed upon
 
         Return:
+        -------
             pos(numpy.ndarray): The position matrix at time ts of shape (N,3)
         """
         u = self.u_
@@ -90,7 +93,7 @@ class Liquid_crystal:
         else:
             return u.atoms.positions
     
-    def head_tail_pos(self,ts):
+    def head_tail_pos(self,ts:int):
         """
         Obtain the positions of the head atom at time ts
 
@@ -98,7 +101,8 @@ class Liquid_crystal:
         -----
             ts(int)     : The time step at which this calculation is performed up
         
-        Returns:
+        Return:
+        -------
             head_pos(numpy.ndarray)     : The head positions returned in a np.ndarray with shape (N,3)
         """
         head_id  = self.head_id_
@@ -117,7 +121,7 @@ class Liquid_crystal:
         
         return head_pos, tail_pos
 
-    def COM(self,ts,segment="whole"):
+    def COM(self,ts:int,segment:str="whole"):
         """
         Function that calculates the center of mass of the Liquid crystal molecule at time ts
 
@@ -148,15 +152,17 @@ class Liquid_crystal:
 
         return COM_mat
  
-    def director_mat(self,ts,MOI=False):
+    def director_mat(self,ts:int,MOI:bool=False):
         """
         Function that finds the director vector of all the residues in the system and put it in a matrix of shape (N,3). This can also find the director matrix using Moment of inertia tensor (the eigenvector that corresponds to the lowest eigenvalue of MOI tensor)
 
         Args:
-            ts(int): The time frame of the simulation that this operation is performed upon
+        -----
+            ts(int)  : The time frame of the simulation that this operation is performed upon
             MOI(bool): Whether or not to find director matrix using Moment of Inertia tensor
 
         Return:
+        -------
             vec(numpy.ndarray): The director matrix of all the residues in the system
         """
         u            = self.u_
@@ -185,15 +191,17 @@ class Liquid_crystal:
 
         return self.director_mat_, self.norm_mat_
 
-    def Qmatrix(self,ts,MOI=False):
+    def Qmatrix(self,ts:int,MOI:bool=False):
         """
         Function that calculates the Qmatrix of the system at time ts.
 
         Args:
+        -----
             ts(int)     : The time frame of the simulation
             MOI(bool)   : Whether or not to use moment of inertia tensor
 
         Return:
+        -------
             1.Qmatrix(numpy.ndarray)= The Q matrix of the liquid crystalline system
             2.eigval(numpy.ndarray) = The eigenvalue of the system at time ts
             2.eigvec(numpy.ndarray) = The eigenvector of the system at time ts
@@ -209,8 +217,26 @@ class Liquid_crystal:
         eigvec = eigvec[:,order]
 
         return Q,eigval,eigvec
+    
+    def director(self, ts:int, MOI:bool=False):
+        """
+        Function that gets the director of the system at time ts, director is defined as the eigenvector that corresponds to the 
+        largest eigenvalue of the Q tensor
 
-    def p2(self,ts, MOI=False):
+        Args:
+        -----
+            ts(int)    : The time step at which the calculation is performed on
+            MOI(bool)  : A boolean that signifies whether or not we are calculating Q tensor with moment of inertia tensor
+        
+        Returns:
+        --------
+            director(numpy.ndarray)     : The director of the system that is defined as the eigenvector that corresponds to the largest eigenvalue of the Q tensor
+        """
+        _,_,eigvec           = self.Qmatrix(ts, MOI=MOI)
+
+        return eigvec[:,-1]
+        
+    def p2(self,ts:int, MOI:bool=False):
         """
         Function calculating p2 order parameter for nCB molecule using Q tensor formulation
         Q matrix is calculated as following:
@@ -221,6 +247,7 @@ class Liquid_crystal:
         u_{l} is chosen to be the normalized vector between C and N in nCB
 
         Return:
+        -------
             p2(float)    : p2 value at time ts
         """
         _, eigval, _ = self.Qmatrix(ts, MOI=MOI)
@@ -228,16 +255,18 @@ class Liquid_crystal:
 
         return p2
 
-    def dp2_dx(self,ts):
+    def dp2_dx(self,ts:int):
         """
         Derivative of p2 with respect to the head & tail atoms
 
         Args:
+        -----
             ts(int)        : The time step the calculation is performed on
 
         Return:
-            head_derivative(numpy.ndarray)
-            tail_derivative(numpy.ndarray)
+        -------
+            head_derivative(numpy.ndarray) : A numpy.ndarray with shape (N,3) with derivatives for the head atom
+            tail_derivative(numpy.ndarray) : A numpy.ndarray with shape (N,3) with derivatives for the tail atom
         """
         # self.director_mat_ & self.norm_mat_ should be updated by Qmatrix call
         _,_,eigvec        = self.Qmatrix(ts)
@@ -252,15 +281,17 @@ class Liquid_crystal:
 
         return (head_derivative, tail_derivative)
 
-    def p2_cos(self,ts,n):
+    def p2_cos(self,ts:int,n:np.ndarray):
         """
         Function that calculates p2 using the second legendre polynomial 
 
         Args:
+        -----
             ts(int)         : The time step at which the calculation is performed on
             n(numpy.ndarray): The director at which the calculation is performed with, doesn't need to be normalized
 
-        Returns:
+        Return:
+        ------
             p2(float)       : The p2 value
         """
         n           = n/np.sqrt((n**2).sum())
@@ -272,15 +303,17 @@ class Liquid_crystal:
 
         return p2
     
-    def dp2cos_dx(self, ts, n):
+    def dp2cos_dx(self, ts:int, n:np.ndarray):
         """
         Function that calculates the derivative of p2 with second legendre polynomial formulation dp2cos_dr
 
         Args:  
+        -----
             ts(int)         : The time step at which the calculation is performed on
             n(numpy.ndarray): The director at which the calculation is performed with, doesn't need to be normalized
 
-        Returns:
+        Return:
+        -------
             tuple of dp2cos_dr(numpy.ndarray) : dp2cos_dr with shape (N,3) with (head_derivative, tail_derivative)
         """
         n               = n/np.sqrt((n**2).sum())
@@ -558,32 +591,3 @@ class Liquid_crystalPV(Liquid_crystal):
             p2tilde_cos(float)  : p2tilde_cos
         """
         u, norm = self.director_mat(ts)
-
-    def p2costilde_prime(self,ts, min_, max_,sigma=0.1, ac = 0.2):
-        """
-        Derivative of p2costilde with respect to the head & tail atoms (N & C)
-
-        Args:
-            ts(int)             : The time step the calculation is performed on
-            min_(numpy.ndarray) : minimum of the orthorhombic box (3,)
-            max_(numpy.ndarray) : maximum of the orthorhombic box (3,)
-            sigma(float)        : sigma as defined by Amish's INDUS
-            ac(float)           : alphac as defined by Amish's INDUS
-        """
-        Qtilde, Ntilde, hx,hr, Ncenter_mat = self.Qtilde(ts, min_,max_)
-        eigvec, eigv = self.director(Qtilde)
-
-        center_ = (max_ + min_)/2
-        max_    = max_ - center_
-        min_    = min_ = center_
-
-        v1 = eigvec[:,1]
-        u, norm  = self.director_mat(ts)
-
-        dot_product = (v1*u).sum(axis=1,keepdims=True)
-        dh_dr       = indus.hprime(Ncenter_mat, min_, max_, hx, sigma=sigma, alphac = ac)
-
-        first_term  = -6/(Ntilde*norm)*hr*dot_product*(v1 - u*dot_product)
-        second_term = 3/(Ntilde**2)*(dot_product**2*hr).sum()*dh_dr - 3/Ntilde*dh_dr*(dot_product**2)
-
-        return first_term + second_term
