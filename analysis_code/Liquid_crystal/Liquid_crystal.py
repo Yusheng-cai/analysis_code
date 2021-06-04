@@ -2,6 +2,7 @@ from __future__ import absolute_import
 import MDAnalysis as mda
 from MDAnalysis.transformations.wrap import unwrap
 import numpy as np
+import time
 
 from ..ProbeVolume.Bounding_box import Bounding_box
 from ..ProbeVolume.ProbeVolume  import _ProbeVolume
@@ -44,15 +45,15 @@ class Liquid_crystal:
         self.director_mat_ = np.zeros((self.Nresidues_,3))
         self.norm_mat_     = np.zeros((self.Nresidues_,1))
 
-        # This is for calculation of COM & MOI
-        if not self.trjconv_:
-            if self.bulk_:
-                transform      = unwrap(self.u_.atoms)
-                self.u_.trajectory.add_transformations(transform)
-            else:
-                atoms          = self.u_.select_atoms("resname {}".format(self.name_)).atoms
-                transform      = unwrap(atoms)
-                self.u_.trajectory.add_transformations(transform)
+        # This is for calculation of COM & MOI, very slow for other processes 
+        # if not self.trjconv_:
+        #     if self.bulk_:
+        #         transform      = unwrap(self.u_.atoms)
+        #         self.u_.trajectory.add_transformations(transform)
+        #     else:
+        #         atoms          = self.u_.select_atoms("resname {}".format(self.name_)).atoms
+        #         transform      = unwrap(atoms)
+        #         self.u_.trajectory.add_transformations(transform)
     
     def __len__(self):
         return len(self.u_.trajectory)
@@ -165,21 +166,22 @@ class Liquid_crystal:
         -------
             vec(numpy.ndarray): The director matrix of all the residues in the system
         """
-        u            = self.u_
+        u       = self.u_
         u.trajectory[ts]
         bb           = self.bb_
         residues     = self.get_residues(ts) 
         
-        ix = 0 
+        residues     = self.get_residues(ts)
 
+        ix = 0 
         if MOI:
             for res in residues:
                 self.director_mat_[ix] = res.atoms.principal_axes()[-1]
                 ix += 1
         else:
-            h,t                  = self.head_tail_pos(ts)
-            self.director_mat_   = h - t
-        
+            h,t                 = self.head_tail_pos(ts)
+            self.director_mat_  = h - t
+
         if not MOI:
             if not self.trjconv_:
                 self.director_mat_     = bb.dr_pbc(self.director_mat_,ts)
@@ -291,7 +293,7 @@ class Liquid_crystal:
             n(numpy.ndarray): The director at which the calculation is performed with, doesn't need to be normalized
 
         Return:
-        ------
+        -------
             p2(float)       : The p2 value
         """
         n           = n/np.sqrt((n**2).sum())
