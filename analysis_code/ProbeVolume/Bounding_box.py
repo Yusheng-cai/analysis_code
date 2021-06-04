@@ -34,9 +34,9 @@ class Bounding_box:
         box_dim     = self.get_boxdimensions(ts)
         lt          = pos < -box_dim/2
         gt          = pos > box_dim/2
-        pos_fixed   = pos + lt*box_dim - gt*box_dim
+        pos         = pos + lt*box_dim - gt*box_dim
 
-        return pos_fixed
+        return pos
     
     def COMag_pbc(self, ag:mda.ResidueGroup, ts):
         """
