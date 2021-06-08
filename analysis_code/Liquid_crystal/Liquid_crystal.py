@@ -328,6 +328,59 @@ class Liquid_crystal:
 
         return (head_derivative, tail_derivative)
 
+    def v0(self, ts:int, n:np.ndarray):
+        """
+        Function that calculates the OP with the director of the system, eigenvector that corresponds to the largest eigenvalue
+        OP: (n\cdot)**2 - 1
+
+        Args:
+        ----
+            ts(int)          : The time step at which the calculation is performed on 
+            n(numpy.ndarray) : The user provided director n
+        
+        Return:
+        -------
+            v0(float)        : The OrderParameter defined above for that time step
+        """
+        n               = n/np.sqrt((n**2).sum())
+        director        = self.director(ts, MOI=False)
+
+        v0              = np.dot(n, director)**2 - 1
+
+        return v0
+
+    def dv0_dr(self, ts:int, n:np.ndarray):
+        """
+        Function that calculates the derivative of the OP with director of the system with respect to r
+
+        Args:
+        -----
+            ts(int)          : The time step at which the calculation is performed on
+        
+        Returns:
+        --------
+            derivatives(numpy.ndarray)  : The derivatives of all the atoms for this OP (N,3)
+        """
+        uij, norm_mat        = self.director_mat(ts, MOI=False)
+        _, eigval, eigvec    = self.Qmatrix(ts, MOI=False)
+        v0                   = eigvec[:,-1] 
+        e0                   = eigval[-1]
+        nv0                  = (n*v0).sum()
+        c                    = 3*nv0/(self.Nresidues_*norm_mat)
+        derivatives          = np.zeros((self.Nresidues_,3))
+        uv0     = (uij*v0).sum(axis=1, keepdims=True)
+
+        for i in [0,1]:
+            vm      = eigvec[:,i]
+            nvm     = (vm*n).sum()
+            diff    = e0 - eigval[i]
+            uvm     = (uij*vm).sum(axis=1, keepdims=True)
+            derivatives += nvm/diff*(vm*uv0 - 2*uvm*uv0*uij + v0*uvm)
+        
+        derivatives *= c
+
+        return derivatives
+
     # TODO: 
     def p2globaldata_pdb(self,start_time,end_time,skip=0):
         """
@@ -593,3 +646,19 @@ class Liquid_crystalPV(Liquid_crystal):
             p2tilde_cos(float)  : p2tilde_cos
         """
         u, norm = self.director_mat(ts)
+    
+    def v0_tilde(self, ts, n):
+        """
+        Function that calculates the OrderParameter with the director of the system which is defined as the eigenvector that 
+        corresponds to the largest eigenvalue
+        
+        Args:
+        ----
+            ts(int)             : The time step at which the calculation is performed on
+            n(numpy.ndarray)    : The user defined director vector (3,)
+        
+        Returns:
+        --------
+            v0_tilde(float)
+        """
+        pass
