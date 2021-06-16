@@ -73,14 +73,15 @@ class ProbeVolume_cylinder(_ProbeVolume):
         r            = np.sqrt(r) 
 
         # calculate the indicators
-        hz           = d2_func.calculate(dr[:,dir_])
-        hr           = d1_func.calculate(r)
-        h            = hz*hr
+        hz              = d2_func.calculate(dr[:,dir_])
+        hr              = d1_func.calculate(r)
+        indicator       = hz*hr
+        self.indicator_ = indicator
 
         htheta       = np.ones((N,1))
         self.hx_     = np.hstack((hr[:,np.newaxis], htheta, hz[:,np.newaxis]))
 
-        return h
+        return indicator, self.hx_
     
     def calculate_derivative(self, pos:np.ndarray, hx:np.ndarray, ts:int):
         """

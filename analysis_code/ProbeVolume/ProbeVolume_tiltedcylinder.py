@@ -89,10 +89,10 @@ class ProbeVolume_tiltedcylinder(_ProbeVolume):
         dr_rotated   = np.matmul(self.rot_mat, dr.T)
         dr_rotated   = dr_rotated.T
 
-        h            = self.cylinder.calculate_Indicator(dr_rotated, ts)
-        self.hx_     = self.cylinder.hx_
+        h, self.hx_  = self.cylinder.calculate_Indicator(dr_rotated, ts)
+        self.Ntilde_ = h.sum()
 
-        return h
+        return h, self.hx_
     
     def calculate_derivative(self, pos:np.ndarray, hx:np.ndarray, ts:int):
         """
@@ -115,5 +115,6 @@ class ProbeVolume_tiltedcylinder(_ProbeVolume):
 
         deriv      = self.cylinder.calculate_derivative(dr_rotated, hx, ts)
         deriv      = np.matmul(self.rot_mat.T, deriv.T)
+        self.derivative_ = deriv.T
 
         return deriv.T
