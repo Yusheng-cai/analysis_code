@@ -17,13 +17,9 @@ class ProbeVolume_Box(_ProbeVolume):
         ac(float)               : alphac for coarse-graining (in units of A)
     """          
     def __init__(self,tpr:str,xtc:str, min_:np.ndarray, max_:np.ndarray, sigma=0.1,ac=0.2):
-        super().__init__(sigma,ac)          
+        super().__init__(tpr, xtc, sigma,ac)          
         self.max_   = max_
         self.min_   = min_
-        self.tpr    = tpr
-        self.xtc    = xtc
-        self.u_     = mda.Universe(tpr,xtc)
-        self.bounding_box  = Bounding_box(self.u_)
 
         # shift min_ & max_
         self.center_       = 1/2*(max_ + min_)
@@ -50,7 +46,7 @@ class ProbeVolume_Box(_ProbeVolume):
             indicator(numpy.ndarray)     : The indicator array in shape (N,1)
             hx(numpy.ndarray)            : The indicator array of each DIM (N,3)
         """
-        bb     = self.bounding_box
+        bb     = self.bounding_box_
 
         pos_center    = bb.dr_pbc(pos - self.center_, ts) 
         hx            = self.func_.calculate(pos_center)
