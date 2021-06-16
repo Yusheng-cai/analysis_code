@@ -17,10 +17,10 @@ class indicator_func_2b(_indicator_func):
     def __init__(self, min_, max_, sigma=0.1, ac=0.2):
         super().__init__(sigma, ac)
         self.k_    = np.sqrt(2*np.pi*sigma**2) * erf(ac/np.sqrt(2*sigma**2)) - 2*ac*np.exp(-ac**2/(2*sigma**2))
-        self.k1_   = 1/self.k*np.sqrt(np.pi*sigma**2/2)
-        self.k2_   = 1/self.k*np.exp(-ac**2/(2*sigma**2))
+        self.k1_   = 1/self.k_*np.sqrt(np.pi*sigma**2/2)
+        self.k2_   = 1/self.k_*np.exp(-ac**2/(2*sigma**2))
 
-        assert(len(min_) == len(max_))
+        #assert(len(min_) == len(max_))
         self.min_  = min_
         self.max_  = max_
 
@@ -37,9 +37,9 @@ class indicator_func_2b(_indicator_func):
             hx(numpy.ndarray)       : The indicator functions returned for each of the dimensions
         """
         # assert that the positions passed in is with 2 dimensions (N,d)
-        assert(len(pos.shape) == 2)
+        # assert(len(pos.shape) == 2)
         # assert that the second dimension of the positions matches with the min_ & max_ of the object
-        assert(pos.shape[1] == len(self.min_))
+        # assert(pos.shape[1] == len(self.min_))
 
         sigma = self.sigma_
         ac    = self.ac_
@@ -74,9 +74,9 @@ class indicator_func_2b(_indicator_func):
         min_        = self.min_
 
         # Some assertions
-        assert(len(pos.shape) == 2)
-        assert(pos.shape[1] == len(max_))
+        # assert(len(pos.shape) == 2)
+        # assert(pos.shape[1] == len(max_))
 
-        derivative  =  -(self.phi(max_[0]-pos[:,0]) - self.phi(min_[0]-pos[:,0]))
+        derivative  =  -(self.phi(max_-pos) - self.phi(min_-pos))
 
         return derivative

@@ -15,8 +15,8 @@ class indicator_func_1b(_indicator_func):
     def __init__(self, max_, sigma=0.1, ac=0.2):
         super().__init__(sigma, ac)
         self.k_    = np.sqrt(2*np.pi*sigma**2) * erf(ac/np.sqrt(2*sigma**2)) - 2*ac*np.exp(-ac**2/(2*sigma**2))
-        self.k1_   = 1/self.k*np.sqrt(np.pi*sigma**2/2)
-        self.k2_   = 1/self.k*np.exp(-ac**2/(2*sigma**2))
+        self.k1_   = 1/self.k_*np.sqrt(np.pi*sigma**2/2)
+        self.k2_   = 1/self.k_*np.exp(-ac**2/(2*sigma**2))
         self.max_  = max_
 
     def calculate(self, pos:np.ndarray):
@@ -32,10 +32,10 @@ class indicator_func_1b(_indicator_func):
             hx(numpy.ndarray)       : The indicator functions returned for each of the dimensions
         """
         # assert that the positions passed in is with 2 dimensions (N,d)
-        assert(len(pos.shape) == 2)
+        # assert(len(pos.shape) == 2)
 
         # assert that the second dimension of the positions matches with the min_ & max_ of the object
-        assert(pos.shape[1] == len(self.max_))
+        # assert(pos.shape[1] == len(self.max_))
 
         sigma = self.sigma_
         ac    = self.ac_
@@ -44,7 +44,7 @@ class indicator_func_1b(_indicator_func):
         max_  = self.max_
 
         hx = (k1*erf((max_ - pos)/(np.sqrt(2)*sigma)) - k2*(max_ - pos) - 1/2)*\
-        np.heaviside(ac - np.abs(max_ - pos), 1.0) + np.heaviside(ac + max_ - pos)
+        np.heaviside(ac - np.abs(max_ - pos), 1.0) + np.heaviside(ac + max_ - pos,1.0)
 
         return hx
     
@@ -62,9 +62,9 @@ class indicator_func_1b(_indicator_func):
         max_        = self.max_
 
         # Some assertions
-        assert(len(pos.shape) == 2)
-        assert(pos.shape[1] == len(max_))
+        # assert(len(pos.shape) == 2)
+        # assert(pos.shape[1] == len(max_))
 
-        derivative  =  -self.phi(max_[0]-pos[:,0])
+        derivative  =  -self.phi(max_-pos)
 
         return derivative
