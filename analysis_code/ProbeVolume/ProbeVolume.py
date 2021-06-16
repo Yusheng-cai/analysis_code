@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+import MDAnalysis as mda
+from .Bounding_box import Bounding_box
 
 # Abstract base class for probe volume
 class _ProbeVolume(ABC):
@@ -9,9 +11,18 @@ class _ProbeVolume(ABC):
         sigma(float)            : sigma for coarse-graining (in units of A)
         ac(float)               : alphac for coarse-graining (in units of A)
     """          
-    def __init__(self,sigma=0.1,ac=0.2):
+    def __init__(self, tpr:str, xtc:str,sigma=0.1,ac=0.2):
+        self.tpr_       = tpr
+        self.xtc_       = xtc
+
+        # Every Probe Volume object has a bounding box object which takes in a universe obj
+        self.u_         = mda.Universe(self.tpr_, self.xtc_)
+        self.bounding_box_  = Bounding_box(self.u_)
+
+        # coarse graining parameters 
         self.sigma_     = sigma 
         self.ac_        = ac
+
         # Improve this!
         self.indicator_  = 0
         self.derivative_ = 0
@@ -44,17 +55,6 @@ class _ProbeVolume(ABC):
         """
         pass
 
-    @abstractmethod
-    def phi(self, pos):
-        """
-        Calculate phi function in INDUS where h = \int phi
-
-        Args:
-          pos(numpy.ndarray)             : The position passed in as shape (N,3)
-          ts(int)                        : The time step at which this operation is performed on
-        """
-        pass
-    
     @abstractmethod
     def calculate_derivative(self,pos, hx, ts):
         """
