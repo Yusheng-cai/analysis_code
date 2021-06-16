@@ -76,7 +76,9 @@ class ProbeVolume_cylinder(_ProbeVolume):
         hz              = d2_func.calculate(dr[:,dir_])
         hr              = d1_func.calculate(r)
         indicator       = hz*hr
+        indicator       = indicator[:,np.newaxis]
         self.indicator_ = indicator
+        self.Ntilde_    = indicator.sum()
 
         htheta       = np.ones((N,1))
         self.hx_     = np.hstack((hr[:,np.newaxis], htheta, hz[:,np.newaxis]))
@@ -123,5 +125,7 @@ class ProbeVolume_cylinder(_ProbeVolume):
                 deriv[:,i] = d2_derivative*hx[:,0] # hx[:,0] refers to the r position
             else:
                 deriv[:,i] = d1_derivative*hx[:,-1]*dr[:,i]/r # hx[:,-1] refers to the principle axis position
+        
+        self.derivative_   = deriv
          
         return deriv

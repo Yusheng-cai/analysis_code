@@ -89,8 +89,10 @@ class ProbeVolume_tiltedcylinder(_ProbeVolume):
         dr_rotated   = np.matmul(self.rot_mat, dr.T)
         dr_rotated   = dr_rotated.T
 
-        h, self.hx_  = self.cylinder.calculate_Indicator(dr_rotated, ts)
-        self.Ntilde_ = h.sum()
+        indicator, self.hx_  = self.cylinder.calculate_Indicator(dr_rotated, ts)
+        indicator            = indicator[:,np.newaxis]
+        self.Ntilde_         = indicator.sum()
+        self.indicator_      = indicator
 
         return h, self.hx_
     

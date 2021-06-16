@@ -71,7 +71,7 @@ class ProbeVolume_Box(_ProbeVolume):
             derivative of hprime(numpy.ndarray) : ((N,3))
         """
         center_       = self.center_
-        bb            = self.bounding_box
+        bb            = self.bounding_box_
         pos_center    = bb.dr_pbc(pos - center_, ts) 
 
         hxprime       = self.func_.calculate_derivative(pos_center)
