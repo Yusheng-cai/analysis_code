@@ -94,7 +94,7 @@ class ProbeVolume_tiltedcylinder(_ProbeVolume):
         self.Ntilde_         = indicator.sum()
         self.indicator_      = indicator
 
-        return h, self.hx_
+        return indicator, self.hx_
     
     def calculate_derivative(self, pos:np.ndarray, hx:np.ndarray, ts:int):
         """
