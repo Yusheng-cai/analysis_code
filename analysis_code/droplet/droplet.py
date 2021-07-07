@@ -67,7 +67,7 @@ class droplet:
         return measure.find_contours(field,c)
 
     @staticmethod
-    def fitcircle(contour):
+    def fitcircle(contour:np.ndarray):
         """
         Fit a circle to the contour
 
@@ -77,23 +77,19 @@ class droplet:
         Return: 
             (xc,yc,Ri): The center (xc,yc) and radius Ri of the fitted circle
         """
-        x = contour[:,0]
-        y = contour[:,1]
+        assert len(contour.shape) == 2, "Please pass in a 2d numpy array"
 
-        xm = x.mean()
-        ym = y.mean()
+        center_estimate = contour.mean(axis=0)
 
-        center_estimate = xm,ym
-        center, _ = optimize.leastsq(func,center_estimate,args=(x,y))
+        center, _ = optimize.leastsq(func,center_estimate,args=(contour))
 
-        xc,yc = center
-        Ri_arr = calc_R(x,y,xc,yc)
+        Ri_arr = calc_R(contour,center)
         Ri = Ri_arr.mean() 
 
-        return (xc,yc,Ri)
+        return (center,Ri)
 
 
-def calc_R(x,y,xc,yc):
+def calc_R(pos:np.ndarray,c:np.ndarray):
     """
     A function that calculates distance of (xc,yc) and all the x,y points that is fitted to a circle
 
@@ -106,9 +102,10 @@ def calc_R(x,y,xc,yc):
     Return:
         R(numpy.ndarray): An array of radius
     """
-    return np.sqrt((x-xc)**2+(y-yc)**2)
+    assert pos.shape[1] == len(c), "Shape of passed in position does not match the center position"
+    return np.sqrt(((pos - c)**2).sum(axis=1))
 
-def func(c,x,y):
+def func(c:np.ndarray,pos:np.ndarray):
     """
     Calculate the algebraic distance between the data points and the mean circle centered at c=(xc,yc)
 
@@ -120,5 +117,5 @@ def func(c,x,y):
     Return:
         dr(numpy.ndarray): A vector of values that represents the distance between the data points and the mean circle centered at c=(xc,yc) 
     """
-    Ri = calc_R(x,y,*c)
+    Ri = calc_R(pos,c)
     return Ri - Ri.mean() 
