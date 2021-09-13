@@ -67,7 +67,11 @@ class droplet:
         return measure.find_contours(field,c)
 
     @staticmethod
+<<<<<<< HEAD
     def fitcircle2d(contour):
+=======
+    def fitcircle(contour:np.ndarray):
+>>>>>>> 2faeb95d57b680f0d1ac8c1f70fbc32d6f64d60b
         """
         Fit a circle to the contour
 
@@ -77,20 +81,16 @@ class droplet:
         Return: 
             (xc,yc,Ri): The center (xc,yc) and radius Ri of the fitted circle
         """
-        x = contour[:,0]
-        y = contour[:,1]
+        assert len(contour.shape) == 2, "Please pass in a 2d numpy array"
 
-        xm = x.mean()
-        ym = y.mean()
+        center_estimate = contour.mean(axis=0)
 
-        center_estimate = xm,ym
-        center, _ = optimize.leastsq(func,center_estimate,args=(x,y))
+        center, _ = optimize.leastsq(func,center_estimate,args=(contour))
 
-        xc,yc = center
-        Ri_arr = calc_R(x,y,xc,yc)
+        Ri_arr = calc_R(contour,center)
         Ri = Ri_arr.mean() 
 
-        return (xc,yc,Ri)
+        return (center,Ri)
 
     @staticmethod 
     def fitsphere3d(contour):
@@ -119,7 +119,7 @@ class droplet:
         return (xc,yc,zc,Ri)
 
 
-def calc_R(x,y,xc,yc):
+def calc_R(pos:np.ndarray,c:np.ndarray):
     """
     A function that calculates distance of (xc,yc) and all the x,y points that is fitted to a circle
 
@@ -132,8 +132,10 @@ def calc_R(x,y,xc,yc):
     Return:
         R(numpy.ndarray): An array of radius
     """
-    return np.sqrt((x-xc)**2+(y-yc)**2)
+    assert pos.shape[1] == len(c), "Shape of passed in position does not match the center position"
+    return np.sqrt(((pos - c)**2).sum(axis=1))
 
+<<<<<<< HEAD
 def calc_R3d(x,y,z,xc,yc,zc):
     """
     A function that calculates distance of (xc,yc,zc) and all the x,y points that is fitted to a circle
@@ -152,6 +154,9 @@ def calc_R3d(x,y,z,xc,yc,zc):
     return np.sqrt((x-xc)**2+(y-yc)**2+(z-zc)**2)
 
 def func(c,x,y):
+=======
+def func(c:np.ndarray,pos:np.ndarray):
+>>>>>>> 2faeb95d57b680f0d1ac8c1f70fbc32d6f64d60b
     """
     Calculate the algebraic distance between the data points and the mean circle centered at c=(xc,yc)
 
@@ -163,7 +168,7 @@ def func(c,x,y):
     Return:
         dr(numpy.ndarray): A vector of values that represents the distance between the data points and the mean circle centered at c=(xc,yc) 
     """
-    Ri = calc_R(x,y,*c)
+    Ri = calc_R(pos,c)
     return Ri - Ri.mean() 
 
 def func3d(c,x,y,z):

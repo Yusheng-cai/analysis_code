@@ -192,8 +192,22 @@ def p2_z(LC,start_t,end_t,bins_z = 100, segment='whole',skip=None,direction='z',
 
 
 
-# find cos(theta) between CN and the global director of LC systems
-# find probability distribution of cos(theta) as a function of z 
+def write_betafactor(u:mda.Universe,data:np.ndarray,pdb_name:str):
+    """
+    write cosine theta data for all atoms into a multi frame pdb file
+    """
+
+    u.add_TopologyAttr("tempfactors")
+    with mda.Writer(pdb_name, multiframe=True, bonds=None, n_atoms=len(u.atoms)) as PDB:
+        for i in range(len(data)):
+            index = int(data[i,0])
+            print("printing frame {}".format(index))
+            u.trajectory[index]
+
+            u.atoms.tempfactors = data[i,1:]
+
+            PDB.write(u.atoms)
+
 
 # write the data to pdb file in the beta factor
 def pdb_bfactor(LC,pdb_name,data,verbose=False,sel_atoms=None,others=False): 
