@@ -192,11 +192,10 @@ def p2_z(LC,start_t,end_t,bins_z = 100, segment='whole',skip=None,direction='z',
 
 
 
-def write_betafactor(u:mda.Universe,data:np.ndarray,pdb_name:str):
+def write_betafactor(u:mda.Universe,data:np.ndarray,pdb_name:str, selection=None):
     """
     write cosine theta data for all atoms into a multi frame pdb file
     """
-
     u.add_TopologyAttr("tempfactors")
     with mda.Writer(pdb_name, multiframe=True, bonds=None, n_atoms=len(u.atoms)) as PDB:
         for i in range(len(data)):
@@ -204,9 +203,13 @@ def write_betafactor(u:mda.Universe,data:np.ndarray,pdb_name:str):
             print("printing frame {}".format(index))
             u.trajectory[index]
 
-            u.atoms.tempfactors = data[i,1:]
+            atoms = u.atoms
+            if selection:
+                atoms = u.select_atoms("resname {}".format(selection))
 
-            PDB.write(u.atoms)
+            atoms.tempfactors = data[i,1:]
+
+            PDB.write(atoms)
 
 
 # write the data to pdb file in the beta factor
