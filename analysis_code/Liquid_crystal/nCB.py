@@ -272,3 +272,39 @@ def xvg_reader(file):
     xvgdata = np.array([float(line.rstrip(" ").lstrip(" ").split()[1]) for line in lines if line[0] not in comment_symbol])
 
     return xvgdata
+
+def rewriteSAMsurface(file:str, nCB:str, SAM:str, outputName:str):
+    u = mda.Universe(file)
+
+    # select the nCB
+    nCB = u.select_atoms("resname {}".format(nCB))
+    SAM = u.select_atoms("resname {}".format(SAM))
+    nAtoms = len(nCB.residues[0].atoms)
+    nres = len(nCB.residues)
+
+    gromacs_format = "{0:>5d}{1:<5s}{2:>5s}{3:>5d}{4:>8.3f}{5:>8.3f}{6:>8.3f}\n"
+
+    totalAtoms = nres * (nAtoms + 1) + len(SAM.atoms)
+
+    index = 1
+    f = open(outputName, "w")
+    f.write("SAM\n")
+    f.write("\t{}\n".format(totalAtoms))
+    for i in range(nres):
+        res = nCB.residues[i]
+
+        for atoms in res.atoms:
+            f.write(gromacs_format.format(i+1,res.resname,atoms.name, index, atoms.position[0]/10, atoms.position[1]/10, atoms.position[2]/10))
+            index += 1
+        f.write(gromacs_format.format(i+1, res.resname, "VS", index, 0,0,0))
+        index += 1
+    
+    for i in range(len(SAM.residues)):
+        res = SAM.residues[i]
+        for atoms in res.atoms:
+            f.write(gromacs_format.format(i+1,res.resname,atoms.name, index, atoms.position[0]/10, atoms.position[1]/10, atoms.position[2]/10))
+            index += 1
+    dim = u.dimensions[:3]/10
+    f.write("\t{}\t{}\t{}".format(dim[0], dim[1], dim[2]))
+    
+    f.close()
